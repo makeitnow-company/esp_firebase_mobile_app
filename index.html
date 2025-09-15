@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css"
+      integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+  </head>
+  <body class="overflow-hidden bg-gray-100">
+    <div class="w-full h-screen overflow-hidden">
+      <!-- header   -->
+      <div class="w-full p-8">
+        <p class="text-center font-bold">My SMART FARM</p>
+      </div>
+      <!-- main -->
+      <div class="grid grid-cols-2" style="height: calc(100vh - 80px)">
+        <!-- left -->
+        <div class="w-full flex flex-col h-full">
+          <!-- 상단 영역 (위쪽에 글 배치) -->
+          <div class="flex-1 flex flex-col justify-start p-4 text-center">
+            <h2 id="soilMoistureValue" class="text-5xl font-bold pt-8">25 %</h2>
+            <p class="text-sm pt-2 text-gray-500">토양 수분 측정중...</p>
+          </div>
+
+          <!-- 하단 영역 (아래쪽에 글 배치) -->
+          <div class="flex-1 flex flex-col justify-end pb-24">
+            <div class="w-full">
+              <div
+                class="grid grid-cols-4 p-2 items-center justify-items-center"
+              >
+                <i
+                  class="fa-solid fa-temperature-full col-span-1 text-red-500"
+                ></i>
+                <p class="col-span-1 text-sm">온도</p>
+                <p
+                  id="temperatureValue"
+                  class="col-span-2 text-sm font-semibold"
+                >
+                  20°C
+                </p>
+              </div>
+              <div
+                class="grid grid-cols-4 p-2 items-center justify-items-center"
+              >
+                <i class="fa-solid fa-percent col-span-1 text-blue-500"></i>
+                <p class="col-span-1 text-sm">습도</p>
+                <p id="humidityValue" class="col-span-2 text-sm font-semibold">
+                  20%
+                </p>
+              </div>
+              <div
+                class="grid grid-cols-4 p-2 items-center justify-items-center"
+              >
+                <i
+                  id="ledIcon"
+                  class="fa-regular fa-lightbulb col-span-1 text-yellow-500"
+                ></i>
+                <p class="col-span-1 text-sm">LED</p>
+                <button
+                  id="ledToggle"
+                  onclick="toggleLED()"
+                  class="col-span-2 px-3 py-1 rounded text-xs font-semibold transition-all duration-300 bg-green-500 text-white hover:bg-green-600"
+                >
+                  ON
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- right -->
+        <div class="w-full h-full flex justify-center items-center">
+          <!-- 수위 바 컨테이너 -->
+          <div class="relative h-full flex flex-col justify-center">
+            <!-- 배경 바 (화면 높이의 70%) -->
+            <div
+              class="w-16 bg-gray-300 rounded-full relative"
+              style="height: 72vh"
+            >
+              <!-- 진행 바 (동적 토양 수분) -->
+              <div
+                id="soilMoistureBar"
+                class="absolute bottom-0 left-0 w-full bg-green-400 rounded-full transition-all duration-500"
+                style="height: 25%"
+              ></div>
+
+              <!-- 토양 수분 텍스트 (바 중앙에서 동적 위치) -->
+              <div
+                id="soilMoistureTextContainer"
+                class="absolute left-1/2 transition-all duration-500"
+                style="bottom: 12.5%; transform: translate(-50%, 50%)"
+              >
+                <span
+                  id="soilMoistureText"
+                  class="text-white bg-black bg-opacity-50 px-2 py-1 rounded text-xs font-semibold"
+                  >25%</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <script>
+          // LED 상태 변수
+          let ledStatus = true; // true = ON, false = OFF
+
+          // 토양 수분 업데이트 함수
+          function updateSoilMoisture(percentage) {
+            // 왼쪽 큰 텍스트 업데이트
+            const soilMoistureValue =
+              document.getElementById("soilMoistureValue");
+            soilMoistureValue.textContent = percentage + " %";
+
+            // 오른쪽 게이지 바 업데이트
+            const soilMoistureBar = document.getElementById("soilMoistureBar");
+            const soilMoistureText =
+              document.getElementById("soilMoistureText");
+            const soilMoistureTextContainer = document.getElementById(
+              "soilMoistureTextContainer"
+            );
+
+            // 게이지 바 높이 업데이트
+            soilMoistureBar.style.height = percentage + "%";
+
+            // 게이지 바 텍스트 내용 업데이트
+            soilMoistureText.textContent = percentage + "%";
+
+            // 텍스트 위치를 게이지 바 중앙에 맞춰 업데이트 (수분의 절반 지점)
+            const centerPosition = percentage / 2;
+            soilMoistureTextContainer.style.bottom = centerPosition + "%";
+            soilMoistureTextContainer.style.transform = "translate(-50%, 50%)";
+          }
+
+          // 온도 업데이트 함수
+          function updateTemperature(temperature) {
+            const temperatureElement =
+              document.getElementById("temperatureValue");
+            temperatureElement.textContent = temperature + "°C";
+          }
+
+          // 습도 업데이트 함수
+          function updateHumidity(humidity) {
+            const humidityElement = document.getElementById("humidityValue");
+            humidityElement.textContent = humidity + "%";
+          }
+
+          // LED 토글 함수
+          function toggleLED() {
+            ledStatus = !ledStatus;
+            const ledButton = document.getElementById("ledToggle");
+            const ledIcon = document.getElementById("ledIcon");
+
+            if (ledStatus) {
+              ledButton.textContent = "ON";
+              ledButton.className =
+                "col-span-2 px-3 py-1 rounded text-xs font-semibold transition-all duration-300 bg-green-500 text-white hover:bg-green-600";
+              ledIcon.className =
+                "fa-solid fa-lightbulb col-span-1 text-yellow-500";
+            } else {
+              ledButton.textContent = "OFF";
+              ledButton.className =
+                "col-span-2 px-3 py-1 rounded text-xs font-semibold transition-all duration-300 bg-gray-500 text-white hover:bg-gray-600";
+              ledIcon.className =
+                "fa-regular fa-lightbulb col-span-1 text-gray-500";
+            }
+
+            // 실제로는 여기서 서버에 LED 상태 전송
+            console.log("LED 상태:", ledStatus ? "ON" : "OFF");
+          }
+
+          // 센서 데이터 받아오는 함수 (시뮬레이션)
+          function fetchSensorData() {
+            // 실제로는 API 호출이나 WebSocket 등을 사용
+            // 여기서는 랜덤 값으로 시뮬레이션
+            const randomSoilMoisture = Math.floor(Math.random() * 100) + 1; // 1-100%
+            const randomTemperature = Math.floor(Math.random() * 20) + 15; // 15-35°C
+            const randomHumidity = Math.floor(Math.random() * 50) + 30; // 30-80%
+
+            updateSoilMoisture(randomSoilMoisture);
+            updateTemperature(randomTemperature);
+            updateHumidity(randomHumidity);
+          }
+
+          // 5초마다 센서 데이터 업데이트 (실제로는 실시간 데이터)
+          setInterval(fetchSensorData, 5000);
+
+          // 실제 API 호출 예시 (주석 처리)
+          /*
+          async function fetchRealWaterLevel() {
+            try {
+              const response = await fetch('/api/water-level');
+              const data = await response.json();
+              updateWaterLevel(data.percentage);
+            } catch (error) {
+              console.error('데이터 가져오기 실패:', error);
+            }
+          }
+          */
+        </script>
+      </div>
+    </div>
+  </body>
+</html>
