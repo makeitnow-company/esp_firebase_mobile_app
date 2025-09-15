@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <title>IoT 대시보드 (ESP32 + Firebase)</title>
+
+    <!-- Tailwind Play CDN (수업/프로토타입용) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+    <!-- 아이콘 (선택) -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://cdn.jsdelivr.net/npm/lucide-static@latest/font/lucide.css"
+      rel="stylesheet"
+    />
+
+    <!-- Firebase v9 Modular CDN -->
+    <script type="module">
+      // Firebase SDKs (필요한 것만: app, database)
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+      import {
+        getDatabase,
+        ref,
+        onValue,
+        set,
+        update,
+      } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+      // --- 🔑 Firebase 프로젝트 설정 (클라이언트 공개 OK; 보안은 Rules로) ---
+      // Your web app's Firebase configuration
+      const firebaseConfig = {
+        apiKey: "AIzaSyDrJZyXrBJ6ygIRTvq3BzaHYroK_YoZclE",
+        authDomain: "makeitnow-esp-study.firebaseapp.com",
+        databaseURL:
+          "https://makeitnow-esp-study-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "makeitnow-esp-study",
+        storageBucket: "makeitnow-esp-study.firebasestorage.app",
+        messagingSenderId: "804040774145",
+        appId: "1:804040774145:web:84605afd1bb0ce4efd6600",
+      };
+
+      // --- 초기화 ---
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+
+      // --- 학습용: 장치 ID를 상단 인풋/쿼리스트링으로 조정 가능 ---
+      const urlParams = new URLSearchParams(location.search);
+      let DEVICE_ID = urlParams.get("id") || "esp32-001";
+
+      // --- 경로 미리 준비 ---
+      const stateRef = ref(db, `/devices/${DEVICE_ID}/state`);
+      const controlRef = ref(db, `/control/${DEVICE_ID}`);
+
+      // --- UI 엘리먼트 캐시 ---
+      const deviceEl = document.getElementById("deviceId");
+      const tempEl = document.getElementById("tempVal");
+      const humEl = document.getElementById("humVal");
+      const tsEl = document.getElementById("tsVal");
+      const statusEl = document.getElementById("statusVal");
+
+      const btnLed = document.getElementById("btnLed");
+      const btnPump = document.getElementById("btnPump");
+      const btnFan = document.getElementById("btnFan");
+
+      const ledStateEl = document.getElementById("ledState");
+      const pumpStateEl = document.getElementById("pumpState");
+      const fanStateEl = document.getElementById("fanState");
+
+      // --- 표시용 ---
+      deviceEl.textContent = DEVICE_ID;
+
+      // --- ① 상태 구독(실시간) ---
+      onValue(stateRef, (snap) => {
+        const v = snap.val();
+        // 예상: { temp: number, hum: number, ts: number, status: "OK" }
+        tempEl.textContent = v?.temp ?? "-";
+        humEl.textContent = v?.hum ?? "-";
+        tsEl.textContent = v?.ts ? new Date(v.ts * 1000).toLocaleString() : "-";
+        statusEl.textContent = v?.status ?? "-";
+      });
+
+      // --- ② 제어 상태 구독(버튼 라벨/색 변경) ---
+      onValue(controlRef, (snap) => {
+        const c = snap.val() || {};
+        // 값은 "ON"/"OFF" 또는 true/false 혼용 가능 → 통일해서 표시
+        const norm = (x) => x === true || String(x).toUpperCase() === "ON";
+
+        const ledOn = norm(c.led);
+        const pumpOn = norm(c.pump);
+        const fanOn = norm(c.fan);
+
+        ledStateEl.textContent = ledOn ? "ON" : "OFF";
+        pumpStateEl.textContent = pumpOn ? "ON" : "OFF";
+        fanStateEl.textContent = fanOn ? "ON" : "OFF";
+
+        btnLed.classList.toggle("bg-brand", ledOn);
+        btnPump.classList.toggle("bg-brand", pumpOn);
+        btnFan.classList.toggle("bg-brand", fanOn);
+        btnLed.classList.toggle("bg-gray-200", !ledOn);
+        btnPump.classList.toggle("bg-gray-200", !pumpOn);
+        btnFan.classList.toggle("bg-gray-200", !fanOn);
+      });
+
+      // --- ③ 버튼 핸들러(제어 쓰기) ---
+      const toggle = async (keyEl, keyName) => {
+        const cur = keyEl.textContent === "ON";
+        // 교육용: 문자열 "ON"/"OFF"로 저장 (ESP32에서 둘 다 수용하도록 구현함)
+        await update(controlRef, { [keyName]: cur ? "OFF" : "ON" });
+      };
+
+      btnLed.addEventListener("click", () => toggle(ledStateEl, "led"));
+      btnPump.addEventListener("click", () => toggle(pumpStateEl, "pump"));
+      btnFan.addEventListener("click", () => toggle(fanStateEl, "fan"));
+
+      // 연결 상태 감시 (연결되면 true)
+      onValue(ref(db, "/.info/connected"), (snap) => {
+        console.log("[INFO.connected]", snap.val());
+      });
+
+      // 2) 읽기 스모크 테스트: 존재 가능성이 큰 경로 한 번 읽기
+      //    실제 DB에 아래 키가 없다면 null이 떠도 OK (요청 자체가 성공했는지가 중요)
+      get(child(ref(db), "/devices/esp32-001/state"))
+        .then((s) => {
+          console.log(
+            "[SMOKE READ] /devices/esp32-001/state =>",
+            s.exists() ? s.val() : "(null)"
+          );
+        })
+        .catch((err) => {
+          console.error("[SMOKE READ ERROR]", err);
+          alert("READ 실패: Console(DevTools) 로그를 확인하세요.");
+        });
+
+      // 3) 쓰기 스모크 테스트: /__ping에 타임스탬프 업데이트
+      update(ref(db, "/__ping"), { web: Date.now() })
+        .then(() => {
+          console.log("[SMOKE WRITE] /__ping OK");
+          alert("연결 OK: /__ping에 쓰기 성공! (콘솔에서 값 확인)");
+        })
+        .catch((err) => {
+          console.error("[SMOKE WRITE ERROR]", err);
+          alert("WRITE 실패: Rules 또는 URL을 확인하세요 (Console 로그 참고).");
+        });
+    </script>
+
+    <style>
+      /* iOS Safari safe area 대응(선택) */
+      body {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 min-h-screen">
+    <!-- 헤더 -->
+    <header class="sticky top-0 z-10 bg-white/90 backdrop-blur border-b">
+      <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+        <h1 class="text-lg font-semibold">IoT 대시보드</h1>
+        <span class="text-sm text-slate-500"
+          >Device: <b id="deviceId">-</b></span
+        >
+      </div>
+    </header>
+
+    <!-- 내용 -->
+    <main class="max-w-md mx-auto px-4 py-4 space-y-4">
+      <!-- 상태 카드 -->
+      <section class="bg-white rounded-2xl shadow p-4">
+        <h2 class="font-semibold mb-3">현재 상태</h2>
+        <div class="grid grid-cols-2 gap-3 text-sm">
+          <div class="p-3 rounded-xl bg-slate-50">
+            <div class="text-slate-500">온도(℃)</div>
+            <div id="tempVal" class="text-2xl font-bold">-</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-50">
+            <div class="text-slate-500">습도(%)</div>
+            <div id="humVal" class="text-2xl font-bold">-</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-50 col-span-2">
+            <div class="text-slate-500">업데이트</div>
+            <div id="tsVal" class="font-mono">-</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-50 col-span-2">
+            <div class="text-slate-500">상태</div>
+            <div id="statusVal" class="font-semibold">-</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 제어 카드 -->
+      <section class="bg-white rounded-2xl shadow p-4">
+        <h2 class="font-semibold mb-3">제어</h2>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="text-sm">
+              <b>LED</b>
+              <span class="ml-2 text-slate-500"
+                >상태: <span id="ledState" class="font-semibold">-</span></span
+              >
+            </div>
+            <button
+              id="btnLed"
+              class="px-4 py-2 rounded-xl bg-gray-200 active:scale-95 transition"
+            >
+              토글
+            </button>
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="text-sm">
+              <b>PUMP</b>
+              <span class="ml-2 text-slate-500"
+                >상태: <span id="pumpState" class="font-semibold">-</span></span
+              >
+            </div>
+            <button
+              id="btnPump"
+              class="px-4 py-2 rounded-xl bg-gray-200 active:scale-95 transition"
+            >
+              토글
+            </button>
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="text-sm">
+              <b>FAN</b>
+              <span class="ml-2 text-slate-500"
+                >상태: <span id="fanState" class="font-semibold">-</span></span
+              >
+            </div>
+            <button
+              id="btnFan"
+              class="px-4 py-2 rounded-xl bg-gray-200 active:scale-95 transition"
+            >
+              토글
+            </button>
+          </div>
+        </div>
+        <p class="text-xs text-slate-500 mt-3">
+          Tip: 주소창에 <code>?id=esp32-001</code>처럼 기기ID를 넘겨 여러 기기를
+          전환해 볼 수 있어요.
+        </p>
+      </section>
+
+      <footer class="text-center text-xs text-slate-400 py-6">
+        © IoT Class
+      </footer>
+    </main>
+  </body>
+</html>
+
+

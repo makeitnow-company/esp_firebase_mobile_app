@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
+    <title>MY SMART FARM</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link
       rel="stylesheet"
@@ -141,13 +141,13 @@
           function updateTemperature(temperature) {
             const temperatureElement =
               document.getElementById("temperatureValue");
-            temperatureElement.textContent = temperature + "°C";
+            temperatureElement.textContent = Math.round(temperature) + "°C";
           }
 
           // 습도 업데이트 함수
           function updateHumidity(humidity) {
             const humidityElement = document.getElementById("humidityValue");
-            humidityElement.textContent = humidity + "%";
+            humidityElement.textContent = Math.round(humidity) + "%";
           }
 
           // LED 토글 함수
@@ -170,38 +170,148 @@
                 "fa-regular fa-lightbulb col-span-1 text-gray-500";
             }
 
-            // 실제로는 여기서 서버에 LED 상태 전송
-            console.log("LED 상태:", ledStatus ? "ON" : "OFF");
-          }
-
-          // 센서 데이터 받아오는 함수 (시뮬레이션)
-          function fetchSensorData() {
-            // 실제로는 API 호출이나 WebSocket 등을 사용
-            // 여기서는 랜덤 값으로 시뮬레이션
-            const randomSoilMoisture = Math.floor(Math.random() * 100) + 1; // 1-100%
-            const randomTemperature = Math.floor(Math.random() * 20) + 15; // 15-35°C
-            const randomHumidity = Math.floor(Math.random() * 50) + 30; // 30-80%
-
-            updateSoilMoisture(randomSoilMoisture);
-            updateTemperature(randomTemperature);
-            updateHumidity(randomHumidity);
-          }
-
-          // 5초마다 센서 데이터 업데이트 (실제로는 실시간 데이터)
-          setInterval(fetchSensorData, 5000);
-
-          // 실제 API 호출 예시 (주석 처리)
-          /*
-          async function fetchRealWaterLevel() {
-            try {
-              const response = await fetch('/api/water-level');
-              const data = await response.json();
-              updateWaterLevel(data.percentage);
-            } catch (error) {
-              console.error('데이터 가져오기 실패:', error);
+            // Firebase가 연결되어 있으면 Firebase 업데이트, 아니면 로컬만 업데이트
+            if (window.updateFirebaseLED) {
+              window.updateFirebaseLED(ledStatus);
+            } else {
+              console.log("LED 상태:", ledStatus ? "ON" : "OFF");
             }
           }
-          */
+
+          // 센서 데이터 받아오는 함수 (시뮬레이션) - Firebase 연결 전 폴백
+          function fetchSensorData() {
+            // Firebase가 연결되어 있지 않을 때만 랜덤 데이터 사용
+            if (!window.firebaseConnected) {
+              const randomSoilMoisture = Math.floor(Math.random() * 100) + 1; // 1-100%
+              const randomTemperature = Math.floor(Math.random() * 20) + 15; // 15-35°C
+              const randomHumidity = Math.floor(Math.random() * 50) + 30; // 30-80%
+
+              updateSoilMoisture(randomSoilMoisture);
+              updateTemperature(randomTemperature);
+              updateHumidity(randomHumidity);
+            }
+          }
+
+          // 5초마다 센서 데이터 업데이트 (Firebase 연결 전까지만)
+          setInterval(fetchSensorData, 5000);
+
+          // 디버깅용 수동 테스트 함수
+          window.testSensorData = function () {
+            console.log("수동 센서 데이터 테스트");
+            updateSoilMoisture(75);
+            updateTemperature(23.5);
+            updateHumidity(65);
+          };
+
+          // 페이지 로드 시 초기화
+          console.log("스마트팜 대시보드 초기화 완료");
+          console.log("수동 테스트: window.testSensorData() 실행 가능");
+        </script>
+
+        <!-- Firebase 연동 스크립트 (선택적) -->
+        <script type="module">
+          // Firebase 사용을 원하지 않으면 이 스크립트 블록 전체를 제거하세요
+
+          // Firebase SDKs import
+          import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+          import {
+            getDatabase,
+            ref,
+            onValue,
+            update,
+          } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+          // Firebase 설정
+          const firebaseConfig = {
+            //이곳에 값을 개인ID로 넣어주세요
+          };
+
+          try {
+            // Firebase 초기화
+            const app = initializeApp(firebaseConfig);
+            const db = getDatabase(app);
+
+            // 장치 ID 설정 (URL 파라미터로 변경 가능)
+            const urlParams = new URLSearchParams(location.search);
+            const DEVICE_ID = urlParams.get("id") || "esp32-001";
+
+            // Firebase 경로
+            const stateRef = ref(db, `/devices/${DEVICE_ID}/state`);
+            const controlRef = ref(db, `/control/${DEVICE_ID}`);
+
+            // Firebase 연결 상태 플래그
+            window.firebaseConnected = true;
+
+            // LED 제어를 Firebase에 전송하는 함수
+            window.updateFirebaseLED = async function (status) {
+              try {
+                await update(controlRef, { led: status ? "ON" : "OFF" });
+                console.log("Firebase LED 업데이트:", status ? "ON" : "OFF");
+              } catch (error) {
+                console.error("Firebase LED 업데이트 실패:", error);
+              }
+            };
+
+            // 센서 데이터 실시간 구독
+            onValue(stateRef, (snapshot) => {
+              const data = snapshot.val();
+              if (data) {
+                console.log("Firebase 센서 데이터:", data);
+
+                // 토양 수분 (soilMoisture 필드가 없으면 습도 기반으로 시뮬레이션)
+                if (data.soil !== undefined) {
+                  updateSoilMoisture(data.soil);
+                } else if (data.hum !== undefined) {
+                  const simulatedSoil = Math.floor(data.hum * 0.8);
+                  updateSoilMoisture(simulatedSoil);
+                }
+
+                // 온도
+                if (data.temp !== undefined) {
+                  updateTemperature(data.temp);
+                }
+
+                // 습도
+                if (data.humi !== undefined) {
+                  updateHumidity(data.humi);
+                }
+              }
+            });
+
+            // LED 제어 상태 실시간 구독
+            onValue(controlRef, (snapshot) => {
+              const control = snapshot.val();
+              if (control && control.led !== undefined) {
+                const ledOn =
+                  control.led === true ||
+                  String(control.led).toUpperCase() === "ON";
+
+                // 현재 LED 상태 업데이트 (무한 루프 방지를 위해 직접 UI만 업데이트)
+                ledStatus = ledOn;
+                const ledButton = document.getElementById("ledToggle");
+                const ledIcon = document.getElementById("ledIcon");
+
+                if (ledOn) {
+                  ledButton.textContent = "ON";
+                  ledButton.className =
+                    "col-span-2 px-3 py-1 rounded text-xs font-semibold transition-all duration-300 bg-green-500 text-white hover:bg-green-600";
+                  ledIcon.className =
+                    "fa-solid fa-lightbulb col-span-1 text-yellow-500";
+                } else {
+                  ledButton.textContent = "OFF";
+                  ledButton.className =
+                    "col-span-2 px-3 py-1 rounded text-xs font-semibold transition-all duration-300 bg-gray-500 text-white hover:bg-gray-600";
+                  ledIcon.className =
+                    "fa-regular fa-lightbulb col-span-1 text-gray-500";
+                }
+              }
+            });
+
+            console.log("Firebase 연동 완료 - 장치 ID:", DEVICE_ID);
+          } catch (error) {
+            console.error("Firebase 초기화 실패:", error);
+            window.firebaseConnected = false;
+          }
         </script>
       </div>
     </div>
